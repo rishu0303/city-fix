@@ -1,0 +1,17 @@
+import express from 'express';
+import { registerUser, loginUser, getMe, approveAdmin } from '../controllers/authController.js';
+import { protect, superAdmin } from '../middleware/authMiddleware.js';
+
+const router = express.Router();
+
+// Public routes
+router.post('/register', registerUser);
+router.post('/login', loginUser);
+
+// Protected routes (requires user login)
+router.get('/me', protect, getMe);
+
+// SuperAdmin only: Approve DepartmentAdmins
+router.patch('/users/:id/approve', protect, superAdmin, approveAdmin);
+
+export default router;
