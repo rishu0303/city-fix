@@ -113,6 +113,24 @@ export const getMe = async (req, res) => {
   }
 };
 
+// @desc    Get DepartmentAdmin accounts for SuperAdmin review
+// @route   GET /api/auth/users/department-admins
+export const getDepartmentAdmins = async (req, res) => {
+  try {
+    const users = await User.find({ role: 'DepartmentAdmin' })
+      .select('_id name email role departmentAssigned isApproved createdAt')
+      .sort({ isApproved: 1, createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: users.length,
+      users
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Approve or Deny a DepartmentAdmin (SuperAdmin only)
 // @route   PATCH /api/auth/users/:id/approve
 export const approveAdmin = async (req, res) => {

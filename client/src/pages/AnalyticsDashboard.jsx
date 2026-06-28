@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Activity, AlertTriangle, BarChart3, CheckCircle2, Clock3, LocateFixed, ShieldAlert } from 'lucide-react';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateFeedback.jsx';
 import { getDashboardAnalytics } from '../services/analyticsService.js';
 import { useAuth } from '../hooks/useAuth.js';
 
@@ -46,6 +47,8 @@ const ChartPanel = ({ title, subtitle, data, tone = 'green' }) => {
 
 const TrendPanel = ({ data }) => {
   const maxValue = Math.max(...data.map((item) => item.value), 1);
+  const totalValue = data.reduce((sum, item) => sum + item.value, 0);
+  const labelStep = Math.max(Math.ceil(data.length / 8), 1);
 
   return (
     <section className="workbench-panel chart-panel wide-chart">
@@ -55,19 +58,26 @@ const TrendPanel = ({ data }) => {
           <h2>Daily complaint volume</h2>
         </div>
       </div>
-      {data.length === 0 ? (
-        <div className="empty-state">
-          <strong>No trend data for this range.</strong>
-          <p>Try expanding the date range or waiting for new reports.</p>
-        </div>
+      {data.length === 0 || totalValue === 0 ? (
+        <EmptyState
+          title="No trend data for this range."
+          message="Try expanding the date range or waiting for new reports."
+        />
       ) : (
         <div className="trend-chart">
-          {data.map((item) => (
-            <div className="trend-column" key={item.name}>
-              <span style={{ height: `${Math.max((item.value / maxValue) * 100, item.value > 0 ? 8 : 0)}%` }} />
-              <small>{item.name.slice(5)}</small>
-            </div>
-          ))}
+          {data.map((item, index) => {
+            const showLabel = index === 0 || index === data.length - 1 || index % labelStep === 0 || item.value > 0;
+
+            return (
+              <div className="trend-column" key={item.name} title={`${item.name}: ${item.value} reports`}>
+                <span
+                  aria-label={`${item.name}: ${item.value} reports`}
+                  style={{ height: `${Math.max((item.value / maxValue) * 100, item.value > 0 ? 10 : 0)}%` }}
+                />
+                <small>{showLabel ? item.name.slice(5) : ''}</small>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
@@ -209,18 +219,39 @@ export const AnalyticsDashboard = () => {
         </div>
       </section>
 
-      {error && <div className="form-error">{error}</div>}
-      {isLoading && <div className="empty-state">Loading analytics...</div>}
+      {error && (
+        <ErrorState
+          title="Analytics could not load."
+          message={error}
+          onRetry={isCitizen && !location ? detectLocationAndLoad : () => loadAnalytics()}
+          actionLabel={isCitizen && !location ? 'Use my location' : 'Retry analytics'}
+        />
+      )}
+      {isLoading && (
+        <LoadingState
+          title="Loading analytics..."
+          message="Building scoped totals, breakdowns, and trend data."
+        />
+      )}
 
       {!analytics && !isLoading && !error && (
-        <div className="empty-state">
-          <strong>{isCitizen ? 'Start with location.' : 'Load your scoped dashboard.'}</strong>
-          <p>
-            {isCitizen
-              ? 'Citizen analytics are limited to nearby issues, so the backend needs your local coordinate.'
-              : 'Department and SuperAdmin analytics are scoped automatically from your account role.'}
-          </p>
-        </div>
+        <EmptyState
+          title={isCitizen ? 'Start with location.' : 'Load your scoped dashboard.'}
+          message={isCitizen
+            ? 'Citizen analytics are limited to nearby issues, so the backend needs your local coordinate.'
+            : 'Department and SuperAdmin analytics are scoped automatically from your account role.'}
+          action={(
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={isCitizen ? detectLocationAndLoad : () => loadAnalytics()}
+              disabled={isLocating || isLoading}
+            >
+              {isCitizen ? <LocateFixed size={16} /> : <BarChart3 size={16} />}
+              {isCitizen ? (isLocating ? 'Locating...' : 'Use my location') : 'Load analytics'}
+            </button>
+          )}
+        />
       )}
 
       {analytics && (

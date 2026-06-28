@@ -4,6 +4,7 @@ import { validateCoordinates } from '../utils/geoValidation.js';
 const DEFAULT_RADIUS_METERS = 5000;
 const DEFAULT_ANALYTICS_DAYS = 30;
 const MS_PER_HOUR = 1000 * 60 * 60;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
 
 const STATUSES = ['Submitted', 'In Review', 'Assigned', 'In Progress', 'Resolved', 'Reopened', 'Rejected'];
 const OPEN_STATUSES = ['Submitted', 'In Review', 'Assigned', 'In Progress', 'Reopened'];
@@ -72,11 +73,28 @@ const formatFixedBuckets = (dataArray, buckets, transformName = (value) => value
   }));
 };
 
-const formatTrendData = (dataArray) => {
-  return dataArray.map((item) => ({
-    name: item._id,
-    value: item.count
-  }));
+const getDayKey = (date) => date.toISOString().slice(0, 10);
+
+const getUtcDayStart = (date) => {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+};
+
+const formatTrendData = (dataArray, from, to) => {
+  const counts = new Map(dataArray.map((item) => [String(item._id), item.count]));
+  const days = [];
+  const cursor = getUtcDayStart(from);
+  const end = getUtcDayStart(to);
+
+  while (cursor <= end) {
+    const key = getDayKey(cursor);
+    days.push({
+      name: key,
+      value: counts.get(key) || 0
+    });
+    cursor.setTime(cursor.getTime() + MS_PER_DAY);
+  }
+
+  return days;
 };
 
 const roundPercent = (value) => {
@@ -216,9 +234,32 @@ export const getDashboardAnalytics = async (req, res) => {
           { $match: { status: 'Resolved' } },
           {
             $project: {
+              resolvedEvent: {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: '$timeline',
+                      as: 'event',
+                      cond: { $eq: ['$$event.status', 'Resolved'] }
+                    }
+                  },
+                  -1
+                ]
+              },
+              createdAt: 1,
+              updatedAt: 1
+            }
+          },
+          {
+            $project: {
               resolutionHours: {
                 $divide: [
-                  { $subtract: ['$updatedAt', '$createdAt'] },
+                  {
+                    $subtract: [
+                      { $ifNull: ['$resolvedEvent.updatedAt', '$updatedAt'] },
+                      '$createdAt'
+                    ]
+                  },
                   MS_PER_HOUR
                 ]
               }
@@ -276,7 +317,7 @@ export const getDashboardAnalytics = async (req, res) => {
           SEVERITIES,
           (severity) => `Severity ${severity}`
         ),
-        trendByDay: formatTrendData(rawData.trendByDay || [])
+        trendByDay: formatTrendData(rawData.trendByDay || [], dateRange.from, dateRange.to)
       }
     });
   } catch (error) {

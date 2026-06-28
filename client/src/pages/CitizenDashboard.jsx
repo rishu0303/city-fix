@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, FilePlus2, LocateFixed, MapPin, Navigation } from 'lucide-react';
 import { ComplaintCard } from '../components/ComplaintCard.jsx';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateFeedback.jsx';
 import { getNearbyComplaints } from '../services/complaintService.js';
 import { useAuth } from '../hooks/useAuth.js';
 
@@ -130,21 +131,45 @@ export const CitizenDashboard = () => {
             </div>
           )}
 
-          {error && <div className="form-error">{error}</div>}
-          {isLoading && <div className="empty-state">Loading nearby reports...</div>}
-
-          {!isLoading && !location && (
-            <div className="empty-state">
-              <strong>Share your location to load nearby issues.</strong>
-              <p>CityFix only uses it to request the local 5km issue feed from the backend.</p>
-            </div>
+          {error && (
+            <ErrorState
+              title="Nearby reports could not load."
+              message={error}
+              onRetry={location ? () => fetchNearby(location) : detectLocation}
+              actionLabel={location ? 'Retry nearby feed' : 'Share location'}
+            />
+          )}
+          {isLoading && (
+            <LoadingState
+              title="Loading nearby reports..."
+              message="Checking the local 5km complaint radius."
+            />
           )}
 
-          {!isLoading && location && complaints.length === 0 && (
-            <div className="empty-state">
-              <strong>No nearby complaints yet.</strong>
-              <p>That can be a good sign. If you see an issue, start a report with a photo and map pin.</p>
-            </div>
+          {!isLoading && !error && !location && (
+            <EmptyState
+              title="Share your location to load nearby issues."
+              message="CityFix only uses it to request the local 5km issue feed from the backend."
+              action={(
+                <button className="ghost-button" type="button" onClick={detectLocation} disabled={isLocating}>
+                  <LocateFixed size={16} />
+                  {isLocating ? 'Locating...' : 'Use my location'}
+                </button>
+              )}
+            />
+          )}
+
+          {!isLoading && !error && location && complaints.length === 0 && (
+            <EmptyState
+              title="No nearby complaints yet."
+              message="That can be a good sign. If you see an issue, start a report with a photo and map pin."
+              action={(
+                <Link className="secondary-action" to="/file">
+                  <FilePlus2 size={16} />
+                  File complaint
+                </Link>
+              )}
+            />
           )}
 
           <div className="complaint-list">

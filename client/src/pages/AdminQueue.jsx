@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, ClipboardList, ImagePlus, ShieldAlert, UploadCloud } from 'lucide-react';
+import { CheckCircle2, ClipboardList, ImagePlus, ShieldAlert, UploadCloud, UserCheck, UserX } from 'lucide-react';
 import { ComplaintCard } from '../components/ComplaintCard.jsx';
 import { SeverityBadge, StatusBadge } from '../components/StatusBadge.jsx';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateFeedback.jsx';
+import { getDepartmentAdmins, updateDepartmentAdminApproval } from '../services/adminService.js';
 import { getDepartmentComplaints, updateComplaintStatus } from '../services/complaintService.js';
 import { useAuth } from '../hooks/useAuth.js';
 
@@ -18,6 +20,14 @@ const transitions = {
 
 const openStatuses = ['Submitted', 'In Review', 'Assigned', 'In Progress', 'Reopened'];
 
+const formatAdminDate = (value) => {
+  if (!value) return 'Joined date unavailable';
+
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium'
+  }).format(new Date(value));
+};
+
 export const AdminQueue = () => {
   const { user } = useAuth();
   const [complaints, setComplaints] = useState([]);
@@ -28,10 +38,16 @@ export const AdminQueue = () => {
   const [resolutionPreview, setResolutionPreview] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [queueError, setQueueError] = useState('');
+  const [approvalError, setApprovalError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [success, setSuccess] = useState('');
+  const [departmentAdmins, setDepartmentAdmins] = useState([]);
+  const [isLoadingAdmins, setIsLoadingAdmins] = useState(false);
+  const [approvalId, setApprovalId] = useState('');
 
   const isAdmin = user?.role === 'DepartmentAdmin' || user?.role === 'SuperAdmin';
+  const isSuperAdmin = user?.role === 'SuperAdmin';
   const selectedComplaint = complaints.find((complaint) => complaint._id === selectedId) || null;
 
   const summary = useMemo(() => {
@@ -48,25 +64,44 @@ export const AdminQueue = () => {
     return [selectedComplaint.status, ...(transitions[selectedComplaint.status] || [])];
   }, [selectedComplaint]);
 
-  const loadQueue = async () => {
+  const applyQueueSelection = useCallback((nextComplaints, preferredId = '') => {
+    const nextSelected = nextComplaints.find((complaint) => complaint._id === preferredId) || nextComplaints[0] || null;
+
+    setSelectedId(nextSelected?._id || '');
+    setStatus(nextSelected?.status || '');
+  }, []);
+
+  const loadQueue = useCallback(async (preferredId = selectedId) => {
     setIsLoading(true);
-    setError('');
+    setQueueError('');
 
     try {
       const data = await getDepartmentComplaints();
       const nextComplaints = data.complaints || [];
       setComplaints(nextComplaints);
-
-      if (!selectedId && nextComplaints.length > 0) {
-        setSelectedId(nextComplaints[0]._id);
-        setStatus(nextComplaints[0].status);
-      }
+      applyQueueSelection(nextComplaints, preferredId);
     } catch (err) {
-      setError(err.response?.data?.message || 'Unable to load the admin queue.');
+      setQueueError(err.response?.data?.message || 'Unable to load the admin queue.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [applyQueueSelection, selectedId]);
+
+  const loadDepartmentAdmins = useCallback(async () => {
+    if (!isSuperAdmin) return;
+
+    setIsLoadingAdmins(true);
+    setApprovalError('');
+
+    try {
+      const data = await getDepartmentAdmins();
+      setDepartmentAdmins(data.users || []);
+    } catch (err) {
+      setApprovalError(err.response?.data?.message || 'Unable to load DepartmentAdmin approvals.');
+    } finally {
+      setIsLoadingAdmins(false);
+    }
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -78,15 +113,11 @@ export const AdminQueue = () => {
 
           const nextComplaints = data.complaints || [];
           setComplaints(nextComplaints);
-
-          if (nextComplaints.length > 0) {
-            setSelectedId(nextComplaints[0]._id);
-            setStatus(nextComplaints[0].status);
-          }
+          applyQueueSelection(nextComplaints);
         })
         .catch((err) => {
           if (isMounted) {
-            setError(err.response?.data?.message || 'Unable to load the admin queue.');
+            setQueueError(err.response?.data?.message || 'Unable to load the admin queue.');
           }
         })
         .finally(() => {
@@ -99,7 +130,29 @@ export const AdminQueue = () => {
         isMounted = false;
       };
     }
-  }, [isAdmin]);
+  }, [applyQueueSelection, isAdmin]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return undefined;
+
+    let isMounted = true;
+
+    getDepartmentAdmins()
+      .then((data) => {
+        if (isMounted) {
+          setDepartmentAdmins(data.users || []);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          setApprovalError(err.response?.data?.message || 'Unable to load DepartmentAdmin approvals.');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isSuperAdmin]);
 
   const selectComplaint = (complaint) => {
     setSelectedId(complaint._id);
@@ -107,7 +160,7 @@ export const AdminQueue = () => {
     setAdminComment('');
     setResolutionImage(null);
     setResolutionPreview('');
-    setError('');
+    setActionError('');
     setSuccess('');
   };
 
@@ -121,32 +174,62 @@ export const AdminQueue = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setError('');
+    setActionError('');
     setSuccess('');
 
     if (!selectedComplaint) {
-      setError('Choose a complaint before updating status.');
+      setActionError('Choose a complaint before updating status.');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      await updateComplaintStatus({
+      const data = await updateComplaintStatus({
         id: selectedComplaint._id,
         status,
         adminComment,
         image: resolutionImage
       });
+      const updatedComplaint = data.complaint;
+
+      if (updatedComplaint?._id) {
+        setComplaints((current) => current.map((complaint) => (
+          complaint._id === updatedComplaint._id ? { ...complaint, ...updatedComplaint } : complaint
+        )));
+        setSelectedId(updatedComplaint._id);
+        setStatus(updatedComplaint.status);
+      }
+
       setSuccess('Complaint status updated successfully.');
       setAdminComment('');
       setResolutionImage(null);
       setResolutionPreview('');
-      await loadQueue();
+      await loadQueue(updatedComplaint?._id || selectedComplaint._id);
     } catch (err) {
-      setError(err.response?.data?.message || 'Unable to update this complaint.');
+      setActionError(err.response?.data?.message || 'Unable to update this complaint.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleApprovalUpdate = async (adminUser, isApproved) => {
+    setApprovalError('');
+    setActionError('');
+    setSuccess('');
+    setApprovalId(adminUser._id);
+
+    try {
+      const data = await updateDepartmentAdminApproval({ id: adminUser._id, isApproved });
+      const updatedUser = data.user;
+      setDepartmentAdmins((current) => current.map((item) => (
+        item._id === updatedUser._id ? { ...item, ...updatedUser } : item
+      )));
+      setSuccess(data.message || `${adminUser.name} updated successfully.`);
+    } catch (err) {
+      setApprovalError(err.response?.data?.message || 'Unable to update DepartmentAdmin approval.');
+    } finally {
+      setApprovalId('');
     }
   };
 
@@ -168,8 +251,8 @@ export const AdminQueue = () => {
           <h1>{user.role === 'SuperAdmin' ? 'Admin queue' : `${user.departmentAssigned} queue`}</h1>
           <p>Review assigned issues, move them through valid status transitions, and attach resolution proof when work is completed.</p>
         </div>
-        <button className="ghost-button" type="button" onClick={loadQueue} disabled={isLoading}>
-          Refresh queue
+        <button className="ghost-button" type="button" onClick={() => loadQueue()} disabled={isLoading}>
+          {isLoading ? 'Refreshing...' : 'Refresh queue'}
         </button>
       </div>
 
@@ -196,7 +279,88 @@ export const AdminQueue = () => {
         </article>
       </div>
 
-      {error && <div className="form-error">{error}</div>}
+      {isSuperAdmin && (
+        <section className="workbench-panel approval-panel">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">SuperAdmin approvals</span>
+              <h2>DepartmentAdmin accounts</h2>
+              <p>Approve verified department workers or revoke access when an account should no longer operate the queue.</p>
+            </div>
+            <button className="ghost-button" type="button" onClick={loadDepartmentAdmins} disabled={isLoadingAdmins}>
+              {isLoadingAdmins ? 'Loading...' : 'Refresh approvals'}
+            </button>
+          </div>
+
+          {approvalError && (
+            <ErrorState
+              title="DepartmentAdmin approvals could not load."
+              message={approvalError}
+              onRetry={loadDepartmentAdmins}
+              actionLabel="Retry approvals"
+            />
+          )}
+
+          {isLoadingAdmins && (
+            <LoadingState
+              title="Loading DepartmentAdmin accounts..."
+              message="Checking pending and approved department workers."
+            />
+          )}
+
+          {!isLoadingAdmins && !approvalError && departmentAdmins.length === 0 && (
+            <EmptyState
+              title="No DepartmentAdmin accounts yet."
+              message="New department registrations will appear here for SuperAdmin review."
+            />
+          )}
+
+          {!isLoadingAdmins && !approvalError && departmentAdmins.length > 0 && (
+            <div className="approval-list">
+              {departmentAdmins.map((adminUser) => (
+                <article className="approval-item" key={adminUser._id}>
+                  <div>
+                    <div className="approval-title">
+                      <strong>{adminUser.name}</strong>
+                      <span className={adminUser.isApproved ? 'approval-chip approved' : 'approval-chip pending'}>
+                        {adminUser.isApproved ? 'Approved' : 'Pending'}
+                      </span>
+                    </div>
+                    <p>{adminUser.email}</p>
+                    <div className="approval-meta">
+                      <span>{adminUser.departmentAssigned}</span>
+                      <span>{formatAdminDate(adminUser.createdAt)}</span>
+                    </div>
+                  </div>
+
+                  <div className="approval-actions">
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => handleApprovalUpdate(adminUser, true)}
+                      disabled={approvalId === adminUser._id || adminUser.isApproved}
+                    >
+                      <UserCheck size={16} />
+                      Approve
+                    </button>
+                    <button
+                      className="danger-button"
+                      type="button"
+                      onClick={() => handleApprovalUpdate(adminUser, false)}
+                      disabled={approvalId === adminUser._id || !adminUser.isApproved}
+                    >
+                      <UserX size={16} />
+                      Revoke
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {actionError && <div className="form-error">{actionError}</div>}
       {success && <div className="form-success">{success}</div>}
 
       <div className="admin-queue-layout">
@@ -208,26 +372,43 @@ export const AdminQueue = () => {
             </div>
           </div>
 
-          {isLoading && <div className="empty-state">Loading admin queue...</div>}
-          {!isLoading && complaints.length === 0 && (
-            <div className="empty-state">
-              <strong>No complaints in this queue.</strong>
-              <p>New department issues will appear here when citizens submit reports.</p>
-            </div>
+          {queueError && (
+            <ErrorState
+              title="Admin queue could not load."
+              message={queueError}
+              onRetry={() => loadQueue()}
+              actionLabel="Retry queue"
+            />
           )}
 
-          <div className="admin-queue-list">
-            {complaints.map((complaint) => (
-              <button
-                className={`admin-queue-item ${complaint._id === selectedId ? 'active' : ''}`}
-                key={complaint._id}
-                type="button"
-                onClick={() => selectComplaint(complaint)}
-              >
-                <ComplaintCard complaint={complaint} compact />
-              </button>
-            ))}
-          </div>
+          {isLoading && (
+            <LoadingState
+              title="Loading admin queue..."
+              message="Fetching scoped complaints and selecting the next issue."
+            />
+          )}
+
+          {!isLoading && !queueError && complaints.length === 0 && (
+            <EmptyState
+              title="No complaints in this queue."
+              message="New department issues will appear here when citizens submit reports."
+            />
+          )}
+
+          {!queueError && (
+            <div className="admin-queue-list">
+              {complaints.map((complaint) => (
+                <button
+                  className={`admin-queue-item ${complaint._id === selectedId ? 'active' : ''}`}
+                  key={complaint._id}
+                  type="button"
+                  onClick={() => selectComplaint(complaint)}
+                >
+                  <ComplaintCard complaint={complaint} compact />
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         <aside className="workbench-panel admin-update-panel">

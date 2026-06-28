@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, CalendarClock, ImageIcon, MapPin, ThumbsUp, UserRound } from 'lucide-react';
+import { LocationPreviewMap } from '../components/LocationPreviewMap.jsx';
 import { SeverityBadge, StatusBadge } from '../components/StatusBadge.jsx';
 import { getComplaintById } from '../services/complaintService.js';
 
@@ -19,6 +20,15 @@ const getCoordinates = (complaint) => {
   }
 
   return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+};
+
+const getCoordinatePair = (complaint) => {
+  const [longitude, latitude] = complaint?.location?.coordinates || [];
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    return null;
+  }
+
+  return { latitude, longitude };
 };
 
 export const ComplaintDetail = () => {
@@ -74,6 +84,7 @@ export const ComplaintDetail = () => {
   }
 
   const coordinates = getCoordinates(complaint);
+  const coordinatePair = getCoordinatePair(complaint);
 
   return (
     <section className="page-surface">
@@ -158,6 +169,12 @@ export const ComplaintDetail = () => {
           <section className="workbench-panel detail-section">
             <span className="eyebrow">Location</span>
             <h2>{complaint.location?.addressString || 'Pinned location'}</h2>
+            {coordinatePair && (
+              <LocationPreviewMap
+                latitude={coordinatePair.latitude}
+                longitude={coordinatePair.longitude}
+              />
+            )}
             <p className="detail-line">
               <MapPin size={16} />
               {coordinates || 'Coordinates unavailable'}

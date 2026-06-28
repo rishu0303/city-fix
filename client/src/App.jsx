@@ -12,14 +12,6 @@ import { FileComplaint } from './pages/FileComplaint.jsx';
 import { Login } from './pages/Login.jsx';
 import { Register } from './pages/Register.jsx';
 
-const PlaceholderPage = ({ title, description }) => (
-  <section className="page-surface compact-page">
-    <span className="eyebrow">Coming into focus</span>
-    <h1>{title}</h1>
-    <p>{description}</p>
-  </section>
-);
-
 function App() {
   return (
     <Routes>
@@ -46,7 +38,7 @@ function App() {
           />
           <Route
             path="/map"
-            element={<PlaceholderPage title="Civic Map" description="A Leaflet-powered issue map will show nearby and department-scoped complaints." />}
+            element={<Navigate to="/dashboard" replace />}
           />
           <Route
             path="/analytics"

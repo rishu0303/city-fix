@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, ShieldAlert } from 'lucide-react';
 import { ComplaintCard } from '../components/ComplaintCard.jsx';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateFeedback.jsx';
 import { getDepartmentComplaints } from '../services/complaintService.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { CitizenDashboard } from './CitizenDashboard.jsx';
@@ -16,25 +17,41 @@ const AdminDashboard = () => {
 
   const isSuperAdmin = user?.role === 'SuperAdmin';
 
+  const loadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const data = await getDepartmentComplaints();
+      setComplaints(data.complaints || []);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to load operations dashboard.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
-    getDepartmentComplaints()
-      .then((data) => {
+    const loadInitialDashboard = async () => {
+      try {
+        const data = await getDepartmentComplaints();
         if (isMounted) {
           setComplaints(data.complaints || []);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         if (isMounted) {
           setError(err.response?.data?.message || 'Unable to load operations dashboard.');
         }
-      })
-      .finally(() => {
+      } finally {
         if (isMounted) {
           setIsLoading(false);
         }
-      });
+      }
+    };
+
+    loadInitialDashboard();
 
     return () => {
       isMounted = false;
@@ -111,13 +128,24 @@ const AdminDashboard = () => {
             <Link className="back-link" to="/complaints">View all</Link>
           </div>
 
-          {error && <div className="form-error">{error}</div>}
-          {isLoading && <div className="empty-state">Loading operations dashboard...</div>}
+          {error && (
+            <ErrorState
+              title="Operations dashboard could not load."
+              message={error}
+              onRetry={loadDashboard}
+            />
+          )}
+          {isLoading && (
+            <LoadingState
+              title="Loading operations dashboard..."
+              message="Fetching current queue totals and urgent reports."
+            />
+          )}
           {!isLoading && !error && priorityComplaints.length === 0 && (
-            <div className="empty-state">
-              <strong>No active complaints in this queue.</strong>
-              <p>New citizen reports will appear here when they are routed to your scope.</p>
-            </div>
+            <EmptyState
+              title="No active complaints in this queue."
+              message="New citizen reports will appear here when they are routed to your scope."
+            />
           )}
 
           <div className="complaint-list">

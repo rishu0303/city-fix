@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Filter, ListFilter, Plus } from 'lucide-react';
 import { ComplaintCard } from '../components/ComplaintCard.jsx';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateFeedback.jsx';
 import { getComplaints, getDepartmentComplaints } from '../services/complaintService.js';
 import { useAuth } from '../hooks/useAuth.js';
 
@@ -24,13 +25,27 @@ export const ComplaintList = () => {
 
   const isDepartmentScoped = user?.role === 'DepartmentAdmin';
 
+  const loadComplaints = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const data = isDepartmentScoped
+        ? await getDepartmentComplaints()
+        : await getComplaints();
+
+      setComplaints(data.complaints || []);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to load complaints.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isDepartmentScoped]);
+
   useEffect(() => {
     let isMounted = true;
 
-    const loadComplaints = async () => {
-      setIsLoading(true);
-      setError('');
-
+    const loadInitialComplaints = async () => {
       try {
         const data = isDepartmentScoped
           ? await getDepartmentComplaints()
@@ -50,7 +65,7 @@ export const ComplaintList = () => {
       }
     };
 
-    loadComplaints();
+    loadInitialComplaints();
 
     return () => {
       isMounted = false;
@@ -184,14 +199,32 @@ export const ComplaintList = () => {
         </div>
       </section>
 
-      {error && <div className="form-error">{error}</div>}
-      {isLoading && <div className="empty-state">Loading complaints...</div>}
+      {error && (
+        <ErrorState
+          title="Complaint feed could not load."
+          message={error}
+          onRetry={loadComplaints}
+        />
+      )}
+      {isLoading && (
+        <LoadingState
+          title="Loading complaints..."
+          message={isDepartmentScoped ? 'Fetching your department queue.' : 'Fetching the city-wide complaint feed.'}
+        />
+      )}
 
       {!isLoading && !error && filteredComplaints.length === 0 && (
-        <div className="empty-state">
-          <strong>No complaints match this view.</strong>
-          <p>Try loosening a filter, or file a new complaint if there is an issue to report.</p>
-        </div>
+        <EmptyState
+          title={complaints.length === 0 ? 'No complaints loaded yet.' : 'No complaints match this view.'}
+          message={complaints.length === 0
+            ? 'New reports will appear here after citizens submit them.'
+            : 'Try loosening a filter, or reset the feed to see more reports.'}
+          action={complaints.length > 0 ? (
+            <button className="ghost-button" type="button" onClick={resetFilters}>
+              Reset filters
+            </button>
+          ) : null}
+        />
       )}
 
       <div className="complaints-feed">

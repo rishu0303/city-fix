@@ -270,18 +270,15 @@ export const updateComplaintStatus = async (req, res) => {
     // Update the text fields
     complaint.status = status;
     
-    // Safety check: ensure timeline array exists before pushing
-    if (adminComment) {
-      if (!complaint.timeline) {
-        complaint.timeline = [];
-      }
-      
-      complaint.timeline.push({
-        status: status,
-        note: adminComment,
-        updatedBy: req.user._id
-      });
+    if (!complaint.timeline) {
+      complaint.timeline = [];
     }
+
+    complaint.timeline.push({
+      status,
+      note: adminComment || '',
+      updatedBy: req.user._id
+    });
 
     // If the admin uploaded a "proof of fix" image, process it via Cloudinary
     if (req.file) {

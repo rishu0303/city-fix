@@ -1,12 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { BarChart3, ClipboardList, FilePlus2, LayoutDashboard, LogOut, Map, ShieldCheck, Sprout } from 'lucide-react';
+import { BarChart3, ClipboardList, FilePlus2, LayoutDashboard, LogOut, ShieldCheck, Sprout } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.js';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/complaints', label: 'Complaints', icon: ClipboardList },
   { to: '/file', label: 'File Complaint', icon: FilePlus2, roles: ['Citizen'] },
-  { to: '/map', label: 'Map', icon: Map },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/admin', label: 'Admin Queue', icon: ShieldCheck, roles: ['DepartmentAdmin', 'SuperAdmin'] }
 ];
