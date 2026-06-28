@@ -1,8 +1,8 @@
 const DEFAULT_CITY_BOUNDS = {
-  minLat: 12.80,
-  maxLat: 13.20,
-  minLng: 77.40,
-  maxLng: 77.80
+  minLat: 10.65,
+  maxLat: 10.90,
+  minLng: 78.60,
+  maxLng: 78.95
 };
 
 const getNumberFromEnv = (key, fallback) => {

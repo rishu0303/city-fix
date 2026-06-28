@@ -1,5 +1,5 @@
 import express from 'express';
-import { createComplaint, getComplaints, getNearbyComplaints, updateComplaintStatus, getDepartmentComplaints } from '../controllers/complaintController.js';
+import { createComplaint, getComplaints, getNearbyComplaints, updateComplaintStatus, getDepartmentComplaints, getComplaintById } from '../controllers/complaintController.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import upload from '../middleware/uploadMiddleware.js';
 
@@ -18,6 +18,9 @@ router.get('/department', protect, admin, getDepartmentComplaints);
 // Protected route to create a complaint (Requires JWT and Image)
 // Note: 'image' matches the form-data key we will use in Postman/React
 router.post('/', protect, upload.single('image'), createComplaint);
+
+// Protected route to get a single complaint detail
+router.get('/:id', protect, getComplaintById);
 
 // Protected Admin route to update complaint status
 router.patch('/:id/status', protect, admin, upload.single('image'), updateComplaintStatus);

@@ -207,6 +207,32 @@ export const getDepartmentComplaints = async (req, res) => {
   }
 };
 
+// @desc    Get one complaint by id
+// @route   GET /api/complaints/:id
+// @access  Private
+export const getComplaintById = async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id)
+      .populate('user', 'name email')
+      .populate('timeline.updatedBy', 'name role');
+
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: 'Complaint not found' });
+    }
+
+    if (req.user.role === 'DepartmentAdmin' && complaint.category !== req.user.departmentAssigned) {
+      return res.status(403).json({
+        success: false,
+        message: `Access denied. This issue belongs to the ${complaint.category} department. You are assigned to ${req.user.departmentAssigned}.`
+      });
+    }
+
+    res.status(200).json({ success: true, complaint });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Admin: Update complaint status & upload resolution proof
 // @route   PATCH /api/complaints/:id/status
 // @access  Private/Admin
