@@ -1,8 +1,15 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 
+const DEPARTMENTS = ['Roads', 'Electrical', 'Sanitation', 'Water', 'General'];
+const MIN_PASSWORD_LENGTH = 8;
+
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+};
+
+const isValidEmail = (email) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 };
 
 // @desc    Register new user
@@ -10,18 +17,43 @@ const generateToken = (id) => {
 export const registerUser = async (req, res) => {
   try {
     const { name, email, password, role, departmentAssigned } = req.body;
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const plainPassword = typeof password === 'string' ? password : '';
+    const requestedRole = role === 'DepartmentAdmin' ? 'DepartmentAdmin' : 'Citizen';
+
+    if (!normalizedName) {
+      return res.status(400).json({ success: false, message: 'Name is required.' });
+    }
+
+    if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: 'A valid email is required.' });
+    }
+
+    if (plainPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`
+      });
+    }
+
+    if (requestedRole === 'DepartmentAdmin' && !DEPARTMENTS.includes(departmentAssigned)) {
+      return res.status(400).json({
+        success: false,
+        message: `DepartmentAdmin registration requires a valid department: ${DEPARTMENTS.join(', ')}.`
+      });
+    }
     
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) return res.status(400).json({ success: false, message: 'User already exists' });
 
     // Public registration must never create privileged SuperAdmin accounts.
-    const requestedRole = role === 'DepartmentAdmin' ? 'DepartmentAdmin' : 'Citizen';
     const isApproved = requestedRole === 'DepartmentAdmin' ? false : true;
 
     const user = await User.create({
-      name,
-      email,
-      password,
+      name: normalizedName,
+      email: normalizedEmail,
+      password: plainPassword,
       role: requestedRole,
       departmentAssigned: requestedRole === 'DepartmentAdmin' ? departmentAssigned : undefined,
       isApproved
@@ -45,7 +77,8 @@ export const registerUser = async (req, res) => {
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (user && (await user.matchPassword(password))) {
       
@@ -85,6 +118,13 @@ export const getMe = async (req, res) => {
 export const approveAdmin = async (req, res) => {
   try {
     const { isApproved } = req.body; // Expecting boolean true/false
+    if (typeof isApproved !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'isApproved must be a boolean value.'
+      });
+    }
+
     const user = await User.findById(req.params.id);
 
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });

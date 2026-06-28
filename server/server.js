@@ -7,6 +7,7 @@ import { Pinecone } from '@pinecone-database/pinecone';
 // --- IMPORT ROUTES ---
 import authRoutes from './routes/authRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
 import { startEscalationEngine } from './jobs/escalationJob.js';
 
 // Load environment variables
@@ -82,6 +83,8 @@ app.get("/api/pinecone-test", async (req,res)=>{
 app.use('/api/auth', authRoutes);
 // Link the complaint routes to the /api/complaints path
 app.use('/api/complaints', complaintRoutes);
+// Link the analytics routes for the Dashboard
+app.use('/api/analytics', analyticsRoutes);
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {

@@ -44,6 +44,12 @@ const complaintSchema = new mongoose.Schema({
 
 // Create a 2dsphere index for location-based feeds
 complaintSchema.index({ location: '2dsphere' });
+complaintSchema.index({ category: 1 });
+complaintSchema.index({ status: 1 });
+complaintSchema.index({ severityRating: 1 });
+complaintSchema.index({ createdAt: -1 });
+complaintSchema.index({ category: 1, createdAt: -1 });
+complaintSchema.index({ status: 1, createdAt: -1 });
 
 // FIX: Removed 'next' and 'next()' from the pre-save hook. 
 // Modern Mongoose handles synchronous hooks automatically!
