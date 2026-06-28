@@ -11,7 +11,7 @@ router.post('/login', loginUser);
 // Protected routes (requires user login)
 router.get('/me', protect, getMe);
 
-// SuperAdmin only: Approve DepartmentAdmins
+// 🔥 NEW: SuperAdmin route to approve DepartmentAdmins
 router.patch('/users/:id/approve', protect, superAdmin, approveAdmin);
 
 export default router;

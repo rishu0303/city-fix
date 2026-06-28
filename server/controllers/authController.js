@@ -14,16 +14,22 @@ export const registerUser = async (req, res) => {
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ success: false, message: 'User already exists' });
 
-    // 🔥 NEW LOGIC: DepartmentAdmins require approval. Citizens/SuperAdmins do not.
-    const isApproved = role === 'DepartmentAdmin' ? false : true;
+    // Public registration must never create privileged SuperAdmin accounts.
+    const requestedRole = role === 'DepartmentAdmin' ? 'DepartmentAdmin' : 'Citizen';
+    const isApproved = requestedRole === 'DepartmentAdmin' ? false : true;
 
     const user = await User.create({
-      name, email, password, role, departmentAssigned, isApproved
+      name,
+      email,
+      password,
+      role: requestedRole,
+      departmentAssigned: requestedRole === 'DepartmentAdmin' ? departmentAssigned : undefined,
+      isApproved
     });
 
     res.status(201).json({
       success: true,
-      message: role === 'DepartmentAdmin' 
+      message: requestedRole === 'DepartmentAdmin' 
         ? 'Registration successful. Your account is pending SuperAdmin approval.' 
         : 'Registration successful.',
       user: { _id: user._id, name: user.name, role: user.role, isApproved: user.isApproved },
